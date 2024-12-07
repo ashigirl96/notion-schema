@@ -13,8 +13,12 @@
   "module": "src/index.ts",
   "type": "module",
   "dependencies": {
+    "@babel/parser": "7.26.3",
     "@notionhq/client": "2.2.15",
-    "commander": "12.1.0"
+    "ast-types": "0.14.2",
+    "commander": "12.1.0",
+    "recast": "0.23.9",
+    "ts-morph": "24.0.0"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

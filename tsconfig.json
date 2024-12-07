@@ -22,7 +22,8 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "types": ["bun"]
+    "typeRoots": ["./node_modules/@types", "./src/types"],
+    "types": ["bun", "@notionhq/client"]
   },
   "include": ["**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules"]
