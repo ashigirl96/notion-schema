@@ -1,8 +1,12 @@
 import path from 'node:path'
 
-// Bunの直接インポートを利用してTypeScriptファイルを読み込み
-export async function loadConfig() {
-  const configPath = path.resolve(process.cwd(), 'notion.config.ts')
-  const config = await import(configPath)
+export async function loadConfig(configPath: string) {
+  const resolvedPath = path.resolve(process.cwd(), configPath)
+  const config = await import(resolvedPath)
+
+  if (!config.default.apiKey) {
+    throw new Error('NOTION_API_KEY is missing in the configuration file.')
+  }
+
   return config.default
 }
