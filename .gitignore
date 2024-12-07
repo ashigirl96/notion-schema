@@ -176,3 +176,4 @@ dist
 
 generated/
 notion.config.ts
+.turbo/

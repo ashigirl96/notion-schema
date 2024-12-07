@@ -2,7 +2,6 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { Client } from '@notionhq/client'
 import type { JSONSchema4 } from 'json-schema'
-import { compile } from 'json-schema-to-typescript'
 import { loadConfig } from './config'
 
 async function generateType(client: Client, databaseId: string, name: string, _outputDir: string) {
@@ -26,8 +25,7 @@ async function generateType(client: Client, databaseId: string, name: string, _o
       schema.properties[key] = { type: 'st' } // 他の型も適宜対応
     }
   }
-
-  return await compile(schema, name)
+  return ''
 }
 
 export async function generateTypes(configPath: string) {
