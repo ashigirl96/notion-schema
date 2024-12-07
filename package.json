@@ -1,0 +1,27 @@
+{
+  "name": "notion-schema",
+  "version": "1.0.0",
+  "bin": {
+    "notion-schema": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "bun build src/cli.ts --outdir ./dist --target bun",
+    "dev": "bun run src/cli.ts",
+    "check:fix": "biome check --write"
+  },
+  "module": "src/index.ts",
+  "type": "module",
+  "dependencies": {
+    "@notionhq/client": "2.2.15",
+    "commander": "12.1.0",
+    "json-schema-to-typescript": "15.0.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "@types/bun": "latest",
+    "tsconfig": "7.0.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
