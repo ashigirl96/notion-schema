@@ -18,8 +18,10 @@
         "name": "next"
       }
     ],
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "json-schema-to-typescript": ["packages/json-schema-to-typescript/src/*"]
     },
     "types": ["bun"]
   },

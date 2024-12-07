@@ -4,6 +4,7 @@
   "bin": {
     "notion-schema": "./dist/cli.js"
   },
+  "workspaces": ["packages/*"],
   "scripts": {
     "build": "bun build src/cli.ts --outdir ./dist --target bun",
     "dev": "bun run src/cli.ts",
@@ -14,7 +15,7 @@
   "dependencies": {
     "@notionhq/client": "2.2.15",
     "commander": "12.1.0",
-    "json-schema-to-typescript": "15.0.3"
+    "json-schema-to-typescript": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
