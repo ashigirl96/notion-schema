@@ -42,6 +42,7 @@ program
     try {
       await generateTypes(configPath)
     } catch (err) {
+      // @ts-expect-error
       console.error(err.message)
     }
   })
