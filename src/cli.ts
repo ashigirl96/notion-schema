@@ -1,6 +1,7 @@
 import * as fs from 'node:fs'
 import { readFileSync } from 'node:fs'
 import * as path from 'node:path'
+import { join } from 'node:path'
 import { Command } from 'commander'
 import { generateTypes } from './generate'
 
@@ -26,7 +27,8 @@ program
       process.exit(1)
     }
 
-    const fileContent = readFileSync('./default', 'utf-8')
+    const __filename = join(new URL('', import.meta.url).pathname, '..', 'default')
+    const fileContent = readFileSync(__filename, 'utf-8')
 
     fs.writeFileSync(resolvedConfigPath, fileContent)
     console.log(`Created configuration file at: ${resolvedConfigPath}`)
