@@ -4,15 +4,13 @@ import { Client } from '@notionhq/client'
 import { compile } from 'json-schema-to-typescript'
 import { loadConfig } from './config'
 
-const notion = new Client({ auth: process.env.NOTION_API_KEY })
-
-async function generateType(databaseId: string, name: string, outputDir: string) {
-  const response = await notion.databases.retrieve({ database_id: databaseId })
+async function generateType(client: Client, databaseId: string, name: string, outputDir: string) {
+  const response = await client.databases.retrieve({ database_id: databaseId })
 
   const schema = {
     title: name,
     type: 'object',
-    properties: {},
+    properties: {} as Record<string, object>,
   }
 
   for (const [key, property] of Object.entries(response.properties)) {
@@ -34,7 +32,9 @@ async function generateType(databaseId: string, name: string, outputDir: string)
 
 export async function generateTypes(configPath: string) {
   const config = await loadConfig(configPath)
-  const { databases, outputDir } = config
+  const { databases, outputDir, apiKey } = config
+
+  const client = new Client({ auth: apiKey })
 
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true })
@@ -42,6 +42,6 @@ export async function generateTypes(configPath: string) {
 
   const entries: [string, string][] = Object.entries(databases)
   for (const [name, databaseId] of entries) {
-    await generateType(databaseId, name, outputDir)
+    await generateType(client, databaseId, name, outputDir)
   }
 }
