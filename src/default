@@ -1,0 +1,7 @@
+const config = {
+  databases: {},
+  outputDir: './generated',
+  apiKey: 'your-notion-api-key-here',
+};
+
+export default config;

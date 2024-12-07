@@ -1,4 +1,5 @@
 import * as fs from 'node:fs'
+import { readFileSync } from 'node:fs'
 import * as path from 'node:path'
 import { Command } from 'commander'
 import { generateTypes } from './generate'
@@ -25,21 +26,7 @@ program
       process.exit(1)
     }
 
-    const fileContent = `
-export interface NotionConfig {
-  databases: Record<string, string>;
-  outputDir: string;
-  apiKey: string;
-}
-
-const config: NotionConfig = {
-  databases: {},
-  outputDir: './generated',
-  apiKey: 'your-notion-api-key-here',
-};
-
-export default config;
-`.trim()
+    const fileContent = readFileSync('./default', 'utf-8')
 
     fs.writeFileSync(resolvedConfigPath, fileContent)
     console.log(`Created configuration file at: ${resolvedConfigPath}`)

@@ -16,11 +16,13 @@ async function generateType(client: Client, databaseId: string, name: string, _o
 
   for (const [key, property] of Object.entries(response.properties)) {
     if (property.type === 'select') {
+      // @ts-expect-error
       schema.properties[key] = {
         type: 'string',
         enum: property.select.options.map((option) => option.name),
       }
     } else {
+      // @ts-expect-error
       schema.properties[key] = { type: 'st' } // 他の型も適宜対応
     }
   }
