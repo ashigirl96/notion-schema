@@ -84,11 +84,13 @@ export class Client {
     create: <T extends PropertiesUnion>(
       args: WithAuth<CreateDatabaseParameters<T>>,
     ): Promise<CreateDatabaseResponse<T>> => {
+      // @ts-expect-error
       return this.client.databases.create(args)
     },
     update: <T extends PropertiesUnion>(
       args: WithAuth<UpdateDatabaseParameters<T>>,
     ): Promise<UpdateDatabaseResponse<T>> => {
+      // @ts-expect-error
       return this.client.databases.update(args)
     },
   }
@@ -97,6 +99,7 @@ export class Client {
     create: <T extends PropertiesUnion>(
       args: WithAuth<CreatePageParameters<T>>,
     ): Promise<CreatePageResponse<T>> => {
+      // @ts-expect-error
       return this.client.pages.create(args)
     },
     retrieve: <T extends PropertiesUnion>(
@@ -107,6 +110,7 @@ export class Client {
     update: <T extends PropertiesUnion>(
       args: WithAuth<UpdatePageParameters<T>>,
     ): Promise<UpdatePageResponse<T>> => {
+      // @ts-expect-error
       return this.client.pages.update(args)
     },
     properties: {

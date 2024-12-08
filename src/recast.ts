@@ -45,6 +45,7 @@ export function createNotionDefinitions(): string {
     // `properties` メンバーを探す
     const propertiesSignature = typeLiteral
       .getMembers()
+      // @ts-expect-error
       .find((member) => member.getName?.() === 'properties')
     if (propertiesSignature) {
       propertyGenericTypeAliases.add(typeAlias.getName())
