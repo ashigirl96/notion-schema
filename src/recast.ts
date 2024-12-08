@@ -41,6 +41,14 @@ export function createNotionDefinitions(propertyNames: string[]) {
 
   // TODO: more smart...
   for (const typeAlias of notionApiEndpointsFile.getTypeAliases()) {
+    const type = typeAlias.getTypeNode()
+    if (type && genericTypes.has(type.getText())) {
+      type.replaceWithText(`${type.getText()}<T>`)
+      const typeParams = typeAlias.getTypeParameters()
+      if (typeParams.length === 0) {
+        typeAlias.addTypeParameter({ name: 'T', constraint: propertyNames.join(' | ') })
+      }
+    }
     const typeNode = typeAlias.getTypeNode()
     if (typeNode?.isKind(SyntaxKind.UnionType)) {
       const typeUnion = typeNode.asKind(SyntaxKind.UnionType)
@@ -56,31 +64,20 @@ export function createNotionDefinitions(propertyNames: string[]) {
         }
       }
     }
-    if (typeAlias) {
-      const type = typeAlias.getTypeNode()
-      // console.log('type', type)
-      if (type && genericTypes.has(type.getText())) {
-        type.replaceWithText(`${type.getText()}<T>`)
-        const typeParams = typeAlias.getTypeParameters()
-        if (typeParams.length === 0) {
-          typeAlias.addTypeParameter({ name: 'T', constraint: propertyNames.join(' | ') })
+    if (typeNode?.isKind(SyntaxKind.IntersectionType)) {
+      const typeIntersection = typeNode.asKind(SyntaxKind.IntersectionType)
+      if (typeIntersection) {
+        for (const type of typeIntersection.getTypeNodes()) {
+          if (genericTypes.has(type.getText())) {
+            type.replaceWithText(`${type.getText()}<T>`)
+            const typeParams = typeAlias.getTypeParameters()
+            if (typeParams.length === 0) {
+              typeAlias.addTypeParameter({ name: 'T', constraint: propertyNames.join(' | ') })
+            }
+          }
         }
       }
     }
-    // if (typeNode?.isKind(SyntaxKind.IntersectionType)) {
-    //   const typeIntersection = typeNode.asKind(SyntaxKind.IntersectionType)
-    //   if (typeIntersection) {
-    //     for (const type of typeIntersection.getTypeNodes()) {
-    //       if (genericTypes.has(type.getText())) {
-    //         type.replaceWithText(`${type.getText()}<T>`)
-    //         const typeParams = typeAlias.getTypeParameters()
-    //         if (typeParams.length === 0) {
-    //           typeAlias.addTypeParameter({ name: 'T', constraint: propertyNames.join(' | ') })
-    //         }
-    //       }
-    //     }
-    //   }
-    // }
   }
 
   return notionApiEndpointsFile.getFullText()
