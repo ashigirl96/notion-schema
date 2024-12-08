@@ -1,6 +1,5 @@
 export interface NotionConfig {
   databases: Record<string, string>
-  outputDir: string
   apiKey: string
 }
 
@@ -10,7 +9,6 @@ const config: NotionConfig = {
     Projects: process.env.DATABASE2_ID ?? '',
     User: process.env.DATABASE3_ID ?? '',
   },
-  outputDir: './generated',
   apiKey: process.env.NOTION_TOKEN ?? '',
 }
 

@@ -5,11 +5,25 @@ import { Project, ts } from 'ts-morph'
 
 const { SyntaxKind } = ts
 
+const UNION_PROPERTIES = 'PropertiesUnion'
+export function createUnionPropertyDefinition(propertyNames: string[]): string {
+  const tsconfigPath = path.resolve(__dirname, '../tsconfig.json')
+  const project = new Project({
+    tsConfigFilePath: tsconfigPath,
+  })
+
+  const sourceFile = project.createSourceFile(
+    'UnionProperties.ts',
+    `export type ${UNION_PROPERTIES} = ${propertyNames.join(' | ')};`,
+  )
+  return sourceFile.getFullText()
+}
+
 /**
  * Notion APIの型定義に対して、`properties`フィールドをジェネリック化し、
  * propertyNamesのリテラルユニオンをTとしてTypeAliasに付与します。
  */
-export function createNotionDefinitions(propertyNames: string[]): string {
+export function createNotionDefinitions(): string {
   const tsconfigPath = path.resolve(__dirname, '../tsconfig.json')
   const project = new Project({
     tsConfigFilePath: tsconfigPath,
@@ -20,7 +34,6 @@ export function createNotionDefinitions(propertyNames: string[]): string {
   )
 
   const propertyGenericTypeAliases = new Set<string>()
-  const propertyNamesUnion = propertyNames.join(' | ')
 
   for (const typeAlias of notionApiEndpointsFile.getTypeAliases()) {
     const typeNode = typeAlias.getTypeNode()
@@ -35,10 +48,15 @@ export function createNotionDefinitions(propertyNames: string[]): string {
       .find((member) => member.getName?.() === 'properties')
     if (propertiesSignature) {
       propertyGenericTypeAliases.add(typeAlias.getName())
-      propertiesSignature.replaceWithText('properties: T')
+      // TODO: ResponseのときだけPartialにしないけど、大丈夫そ？
+      if (typeAlias.getName().includes('Response')) {
+        propertiesSignature.replaceWithText('properties: T')
+      } else {
+        propertiesSignature.replaceWithText('properties: Partial<T>')
+      }
       typeAlias.addTypeParameter({
         name: 'T',
-        constraint: propertyNamesUnion,
+        constraint: UNION_PROPERTIES,
       })
     }
   }
@@ -52,7 +70,7 @@ export function createNotionDefinitions(propertyNames: string[]): string {
       if (propertyGenericTypeAliases.has(node.getText())) {
         node.replaceWithText(`${node.getText()}<T>`)
         if (typeAlias.getTypeParameters().length === 0) {
-          typeAlias.addTypeParameter({ name: 'T', constraint: propertyNamesUnion })
+          typeAlias.addTypeParameter({ name: 'T', constraint: UNION_PROPERTIES })
         }
       }
     }
