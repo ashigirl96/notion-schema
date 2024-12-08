@@ -1,23 +1,85 @@
 import path from 'node:path'
 import { builders as b } from 'ast-types'
 import recast from 'recast'
-import { Project } from 'ts-morph'
-// import {CreatePageParameters} from "@notionhq/client/build/src/api-endpoints";
+import { Project, SyntaxKind } from 'ts-morph'
 
-// type Hoge = CreatePageParameters
+export function createNotionDefinitions(propertyNames: string[]) {
+  const tsconfigPath = path.resolve(__dirname, '../tsconfig.json')
+  const project = new Project({
+    tsConfigFilePath: tsconfigPath,
+  })
 
-export function createTypeDefinition(response: any) {
+  const notionApiEndpointsFile = project.addSourceFileAtPath(
+    path.resolve(__dirname, '../node_modules/@notionhq/client/build/src/api-endpoints.d.ts'),
+  )
+
+  const genericTypes = new Set<string>()
+
+  for (const typeAlias of notionApiEndpointsFile.getTypeAliases()) {
+    const typeNode = typeAlias.getTypeNode()
+
+    if (typeNode && typeNode.getKind() === SyntaxKind.TypeLiteral) {
+      const typeLiteral = typeNode.asKind(SyntaxKind.TypeLiteral) // 型リテラルとしてキャスト
+      if (typeLiteral) {
+        const propertiesMember = typeLiteral
+          .getMembers()
+          .find((member) => member.getName() === 'properties')
+        if (propertiesMember) {
+          genericTypes.add(typeAlias.getName())
+
+          propertiesMember.replaceWithText('properties: T')
+          typeAlias.addTypeParameter({
+            name: 'T',
+            constraint: propertyNames.join(' | '),
+          })
+        }
+      }
+    }
+  }
+
+  // TODO: more smart...
+  for (const typeAlias of notionApiEndpointsFile.getTypeAliases()) {
+    const typeNode = typeAlias.getTypeNode()
+    if (typeNode?.isKind(SyntaxKind.UnionType)) {
+      const typeUnion = typeNode.asKind(SyntaxKind.UnionType)
+      if (typeUnion) {
+        for (const type of typeUnion.getTypeNodes()) {
+          if (genericTypes.has(type.getText())) {
+            console.log('AAAAAAA', type.getFullText())
+            type.replaceWithText(`${type.getText()}<T>`)
+            const typeParams = typeAlias.getTypeParameters()
+            if (typeParams.length === 0) {
+              typeAlias.addTypeParameter({ name: 'T', constraint: propertyNames.join(' | ') })
+            }
+          }
+        }
+      }
+    }
+    if (typeNode?.isKind(SyntaxKind.IntersectionType)) {
+      const typeIntersection = typeNode.asKind(SyntaxKind.IntersectionType)
+      if (typeIntersection) {
+        for (const type of typeIntersection.getTypeNodes()) {
+          if (genericTypes.has(type.getText())) {
+            type.replaceWithText(`${type.getText()}<T>`)
+            const typeParams = typeAlias.getTypeParameters()
+            if (typeParams.length === 0) {
+              typeAlias.addTypeParameter({ name: 'T', constraint: propertyNames.join(' | ') })
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return notionApiEndpointsFile.getFullText()
+}
+
+export function createTypeDefinition(response: any, name: string) {
   const tsconfigPath = path.resolve(__dirname, '../tsconfig.json')
   const project = new Project({
     tsConfigFilePath: tsconfigPath,
     skipAddingFilesFromTsConfig: false,
   })
-  const notionClientTypeFile = path.resolve(
-    __dirname,
-    '../node_modules/@notionhq/client/build/src/api-endpoints.d.ts',
-  )
-  project.addSourceFileAtPath(notionClientTypeFile)
-
   const typeDefinition = _createTypeDefinition(response)
 
   const sourceFile = project.createSourceFile('NotionDatabase.ts', typeDefinition)
@@ -32,11 +94,11 @@ export function createTypeDefinition(response: any) {
   const properties = notionDatabaseType.getProperties()
 
   const expandedDefinitions: string[] = []
-  expandedDefinitions.push('export type ExpandedNotionDatabase = {')
+  const _name = `${name}Properties`
+  expandedDefinitions.push(`export type ${_name} = {`)
   for (const property of properties) {
     const propName = property.getName()
     const propType = property.getTypeAtLocation(typeAlias).getText()
-    console.log(propName, propType)
     expandedDefinitions.push(`  ${propName}: ${propType};`)
   }
   expandedDefinitions.push('};')
@@ -45,7 +107,10 @@ export function createTypeDefinition(response: any) {
   const expandedSource = expandedDefinitions.join('\n')
   const expandedFile = project.createSourceFile(outputFileName, expandedSource)
 
-  return expandedFile.getFullText()
+  return {
+    name: _name,
+    type: expandedFile.getFullText(),
+  }
 }
 
 export function _createTypeDefinition(response: any): string {
