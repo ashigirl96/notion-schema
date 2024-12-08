@@ -2,9 +2,14 @@ import path from 'node:path'
 import { builders as b } from 'ast-types'
 import recast from 'recast'
 import { Project, ts } from 'ts-morph'
-import SyntaxKind = ts.SyntaxKind
 
-export function createNotionDefinitions(propertyNames: string[]) {
+const { SyntaxKind } = ts
+
+/**
+ * Notion APIの型定義に対して、`properties`フィールドをジェネリック化し、
+ * propertyNamesのリテラルユニオンをTとしてTypeAliasに付与します。
+ */
+export function createNotionDefinitions(propertyNames: string[]): string {
   const tsconfigPath = path.resolve(__dirname, '../tsconfig.json')
   const project = new Project({
     tsConfigFilePath: tsconfigPath,
@@ -14,67 +19,63 @@ export function createNotionDefinitions(propertyNames: string[]) {
     path.resolve(__dirname, '../node_modules/@notionhq/client/build/src/api-endpoints.d.ts'),
   )
 
-  const genericTypes = new Set<string>()
+  const propertyGenericTypeAliases = new Set<string>()
+  const propertyNamesUnion = propertyNames.join(' | ')
 
   for (const typeAlias of notionApiEndpointsFile.getTypeAliases()) {
     const typeNode = typeAlias.getTypeNode()
+    if (!typeNode || typeNode.getKind() !== SyntaxKind.TypeLiteral) continue
 
-    if (typeNode && typeNode.getKind() === SyntaxKind.TypeLiteral) {
-      const typeLiteral = typeNode.asKind(SyntaxKind.TypeLiteral) // 型リテラルとしてキャスト
-      if (typeLiteral) {
-        const propertiesMember = typeLiteral
-          .getMembers()
-          // @ts-expect-error
-          .find((member) => member.getName() === 'properties')
-        if (propertiesMember) {
-          genericTypes.add(typeAlias.getName())
+    const typeLiteral = typeNode.asKind(SyntaxKind.TypeLiteral)
+    if (!typeLiteral) continue
 
-          propertiesMember.replaceWithText('properties: T')
-          typeAlias.addTypeParameter({
-            name: 'T',
-            constraint: propertyNames.join(' | '),
-          })
-        }
-      }
+    // `properties` メンバーを探す
+    const propertiesSignature = typeLiteral
+      .getMembers()
+      .find((member) => member.getName?.() === 'properties')
+    if (propertiesSignature) {
+      propertyGenericTypeAliases.add(typeAlias.getName())
+      propertiesSignature.replaceWithText('properties: T')
+      typeAlias.addTypeParameter({
+        name: 'T',
+        constraint: propertyNamesUnion,
+      })
     }
   }
 
-  // TODO: more smart...
+  // 追加したGenericTypeを使用するTypeAliasにTを渡す
   for (const typeAlias of notionApiEndpointsFile.getTypeAliases()) {
-    const type = typeAlias.getTypeNode()
-    if (type && genericTypes.has(type.getText())) {
-      type.replaceWithText(`${type.getText()}<T>`)
-      const typeParams = typeAlias.getTypeParameters()
-      if (typeParams.length === 0) {
-        typeAlias.addTypeParameter({ name: 'T', constraint: propertyNames.join(' | ') })
-      }
-    }
     const typeNode = typeAlias.getTypeNode()
-    if (typeNode?.isKind(SyntaxKind.UnionType)) {
-      const typeUnion = typeNode.asKind(SyntaxKind.UnionType)
-      if (typeUnion) {
-        for (const type of typeUnion.getTypeNodes()) {
-          if (genericTypes.has(type.getText())) {
-            type.replaceWithText(`${type.getText()}<T>`)
-            const typeParams = typeAlias.getTypeParameters()
-            if (typeParams.length === 0) {
-              typeAlias.addTypeParameter({ name: 'T', constraint: propertyNames.join(' | ') })
-            }
-          }
+    if (!typeNode) continue
+
+    const applyGenericsIfNeeded = (node: import('ts-morph').TypeNode) => {
+      if (propertyGenericTypeAliases.has(node.getText())) {
+        node.replaceWithText(`${node.getText()}<T>`)
+        if (typeAlias.getTypeParameters().length === 0) {
+          typeAlias.addTypeParameter({ name: 'T', constraint: propertyNamesUnion })
         }
       }
     }
-    if (typeNode?.isKind(SyntaxKind.IntersectionType)) {
-      const typeIntersection = typeNode.asKind(SyntaxKind.IntersectionType)
-      if (typeIntersection) {
-        for (const type of typeIntersection.getTypeNodes()) {
-          if (genericTypes.has(type.getText())) {
-            type.replaceWithText(`${type.getText()}<T>`)
-            const typeParams = typeAlias.getTypeParameters()
-            if (typeParams.length === 0) {
-              typeAlias.addTypeParameter({ name: 'T', constraint: propertyNames.join(' | ') })
-            }
-          }
+
+    // 直接のTypeNode
+    applyGenericsIfNeeded(typeNode)
+
+    // Unionタイプ
+    if (typeNode.isKind(SyntaxKind.UnionType)) {
+      const union = typeNode.asKind(SyntaxKind.UnionType)
+      if (union) {
+        for (const unionTypeNode of union.getTypeNodes()) {
+          applyGenericsIfNeeded(unionTypeNode)
+        }
+      }
+    }
+
+    // Intersectionタイプ
+    if (typeNode.isKind(SyntaxKind.IntersectionType)) {
+      const intersection = typeNode.asKind(SyntaxKind.IntersectionType)
+      if (intersection) {
+        for (const intersectionTypeNode of intersection.getTypeNodes()) {
+          applyGenericsIfNeeded(intersectionTypeNode)
         }
       }
     }
@@ -83,127 +84,133 @@ export function createNotionDefinitions(propertyNames: string[]) {
   return notionApiEndpointsFile.getFullText()
 }
 
+/**
+ * レスポンスから新たな型定義ファイルを生成します。
+ * NotionDatabaseを解析し、`name`を元にしたProperties型やenum定義を作成します。
+ */
 export function createTypeDefinition(response: any, name: string) {
   const tsconfigPath = path.resolve(__dirname, '../tsconfig.json')
   const project = new Project({
     tsConfigFilePath: tsconfigPath,
     skipAddingFilesFromTsConfig: false,
   })
-  const typeDefinition = _createTypeDefinition(response)
 
-  const sourceFile = project.createSourceFile('NotionDatabase.ts', typeDefinition)
+  const generatedTypeDefinition = _createTypeDefinition(response)
+  const sourceFile = project.createSourceFile('NotionDatabase.ts', generatedTypeDefinition)
 
-  // 型解析結果を文字列として出力
-  const outputFileName = 'ExpandedNotionDatabase.ts'
-
+  const expandedTypeFileName = 'ExpandedNotionDatabase.ts'
   const typeAlias = sourceFile.getTypeAliasOrThrow('NotionDatabase')
   const notionDatabaseType = typeAlias.getType()
 
-  // 各プロパティの型を解析
-  const properties = notionDatabaseType.getProperties()
+  const databaseProperties = notionDatabaseType.getProperties()
+  const expandedPropertyTypeName = `${name}Properties`
 
-  const expandedDefinitions: string[] = []
-  const propertyName = `${name}Properties`
-  expandedDefinitions.push(`export type ${propertyName} = {`)
-  for (const property of properties) {
+  const expandedTypeDefinitions: string[] = []
+  expandedTypeDefinitions.push(`export type ${expandedPropertyTypeName} = {`)
+  for (const property of databaseProperties) {
     const propName = property.getName()
     const propType = property.getTypeAtLocation(typeAlias).getText()
-    expandedDefinitions.push(`  ${propName}: ${propType};`)
+    expandedTypeDefinitions.push(`  ${propName}: ${propType};`)
   }
-  expandedDefinitions.push('};')
+  expandedTypeDefinitions.push('};')
 
-  // 新しいソースファイルを作成
-  const expandedSource = expandedDefinitions.join('\n')
-  const expandedFile = project.createSourceFile(outputFileName, expandedSource)
+  const expandedSource = expandedTypeDefinitions.join('\n')
+  const expandedFile = project.createSourceFile(expandedTypeFileName, expandedSource)
 
-  const propertyTypeAlias = expandedFile.getTypeAliasOrThrow(propertyName)
+  const propertyTypeAlias = expandedFile.getTypeAliasOrThrow(expandedPropertyTypeName)
   const propertyTypeLiteral = propertyTypeAlias
     .getTypeNodeOrThrow()
     .asKindOrThrow(SyntaxKind.TypeLiteral)
 
-  // TODO: enumの型を解析
+  // enum定義生成
   for (const [propertyKey, value] of Object.entries(response.properties)) {
-    // _keyの最初の文字を大文字に変換
     // @ts-expect-error
     if (value.type === 'select' || value.type === 'multi_select') {
-      const _key = propertyKey.charAt(0).toUpperCase() + propertyKey.slice(1)
-      const enumName = `${name}${_key}Enum`
+      const capitalizedPropertyKey = propertyKey.charAt(0).toUpperCase() + propertyKey.slice(1)
+      const enumName = `${name}${capitalizedPropertyKey}Enum`
+      // @ts-expect-error
+      const enumOptions = value[value.type]?.options || []
+
       expandedFile.addEnum({
+        isExported: true,
         name: enumName,
-        // @ts-expect-error
-        members: value[value.type].options.map((option) => ({
+        members: enumOptions.map((option: any) => ({
           name: option.name,
           initializer: `"${option.name}"`,
         })),
       })
 
-      for (const property of propertyTypeLiteral.getProperties()) {
-        if (property.getName() === propertyKey) {
-          const propertyTypeNode = property.getTypeNodeOrThrow()
-          propertyTypeNode
-            .getDescendantsOfKind(SyntaxKind.PropertySignature)
-            .forEach((descendant) => {
-              if (descendant.getName() === value.type) {
-                const unionTypeNode = descendant.getTypeNodeOrThrow()
-                unionTypeNode
-                  .getDescendantsOfKind(SyntaxKind.TypeLiteral)
-                  .forEach((_typeLiteral) => {
-                    _typeLiteral.getProperties().forEach((selectProperty) => {
-                      if (selectProperty.getName() === 'name') {
-                        selectProperty.setType(enumName)
-                      }
-                    })
-                  })
-              }
-            })
-        }
+      // プロパティの型定義をenumに差し替え
+      for (const prop of propertyTypeLiteral.getProperties()) {
+        if (prop.getName() !== propertyKey) continue
+        const propertyTypeNode = prop.getTypeNodeOrThrow()
+        propertyTypeNode
+          .getDescendantsOfKind(SyntaxKind.PropertySignature)
+          .forEach((descendant) => {
+            // @ts-expect-error
+            if (descendant.getName() !== value.type) return
+            descendant
+              .getTypeNodeOrThrow()
+              .getDescendantsOfKind(SyntaxKind.TypeLiteral)
+              .forEach((literal) => {
+                literal.getProperties().forEach((selectProp) => {
+                  if (selectProp.getName() === 'name') {
+                    selectProp.setType(enumName)
+                  }
+                })
+              })
+          })
       }
     }
   }
 
   return {
-    name: propertyName,
+    name: expandedPropertyTypeName,
     type: expandedFile.getFullText(),
   }
 }
 
+/**
+ * 指定された`response`オブジェクトからNotionDatabase型を生成します。
+ * Notionのプロパティタイプは`PropertyType<"type">`で表現します。
+ */
 export function _createTypeDefinition(response: any): string {
-  // 文字列でtype aliasを定義
-  const typeDefinitions = `
+  const typeDefinitionHeader = `
     import type { CreatePageParameters } from "@notionhq/client/build/src/api-endpoints";
     
     type PropertyUnion = CreatePageParameters['properties'][string];
-    type PropertyType<T extends string> = Extract<PropertyUnion, { type?: T }>
+    type PropertyType<T extends string> = Extract<PropertyUnion, { type?: T }>;
   `
 
-  // 上記のtype定義文字列をASTにパース
-  const typeDefsAst = recast.parse(typeDefinitions, {
+  const typeDefsAst = recast.parse(typeDefinitionHeader, {
     parser: require('recast/parsers/typescript'),
   })
 
-  // メインとなるNotionDatabase型のASTを生成
+  const notionPropertySignatures = Object.entries(response.properties).map(
+    ([key, value]: [string, any]) => {
+      const mappedPropertyType = mapNotionPropertyTypeToTSType(value.type)
+      return b.tsPropertySignature(b.identifier(key), b.tsTypeAnnotation(mappedPropertyType))
+    },
+  )
 
-  const fields = Object.entries(response.properties).map(([key, value]: [string, any]) => {
-    const tsType = mapNotionTypeToTSType(value.type)
-    return b.tsPropertySignature(b.identifier(key), b.tsTypeAnnotation(tsType))
-  })
-
-  const typeLiteral = b.tsTypeLiteral(fields)
+  const typeLiteral = b.tsTypeLiteral(notionPropertySignatures)
   const notionDatabaseAlias = b.tsTypeAliasDeclaration(b.identifier('NotionDatabase'), typeLiteral)
   const notionDatabaseExport = b.exportNamedDeclaration(notionDatabaseAlias)
 
-  // 全体のASTを構築
   const ast = b.file(b.program([...typeDefsAst.program.body, notionDatabaseExport]))
-
   return recast.print(ast).code
 }
 
-function mapNotionTypeToTSType(notionType: string) {
-  // PropertyType<'xxx'> を返すためにtsTypeReference＋tsTypeParameterInstantiationを利用
-  const propTypeRef = (key: string) =>
+/**
+ * NotionのプロパティタイプをTS型定義にマッピングします。
+ * `PropertyType<"notionType">`という形で返します。
+ */
+function mapNotionPropertyTypeToTSType(notionType: string) {
+  const createPropertyTypeReference = (key: string) =>
     b.tsTypeReference(
       b.identifier('PropertyType'),
       b.tsTypeParameterInstantiation([b.tsLiteralType(b.stringLiteral(key))]),
     )
-  return propTypeRef(notionType)
+
+  return createPropertyTypeReference(notionType)
 }
