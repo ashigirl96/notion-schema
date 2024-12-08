@@ -7,7 +7,7 @@ export interface NotionConfig {
 const config: NotionConfig = {
   databases: {
     Tasks: process.env.DATABASE1_ID ?? '',
-    // Projects: process.env.DATABASE2_ID,
+    Projects: process.env.DATABASE2_ID ?? '',
   },
   outputDir: './generated',
   apiKey: process.env.NOTION_TOKEN ?? '',

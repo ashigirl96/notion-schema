@@ -22,6 +22,7 @@ export async function generateTypes(configPath: string) {
   const entries: [string, string][] = Object.entries(databases)
   const generated = await Promise.all(
     entries.map(([name, databaseId]) => {
+      console.log(`Generating type for ${name}`)
       return generateType(client, databaseId, name)
     }),
   )

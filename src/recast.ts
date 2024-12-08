@@ -1,7 +1,8 @@
 import path from 'node:path'
 import { builders as b } from 'ast-types'
 import recast from 'recast'
-import { Project, SyntaxKind } from 'ts-morph'
+import { Project, ts } from 'ts-morph'
+import SyntaxKind = ts.SyntaxKind
 
 export function createNotionDefinitions(propertyNames: string[]) {
   const tsconfigPath = path.resolve(__dirname, '../tsconfig.json')
@@ -23,6 +24,7 @@ export function createNotionDefinitions(propertyNames: string[]) {
       if (typeLiteral) {
         const propertiesMember = typeLiteral
           .getMembers()
+          // @ts-expect-error
           .find((member) => member.getName() === 'properties')
         if (propertiesMember) {
           genericTypes.add(typeAlias.getName())
@@ -45,7 +47,6 @@ export function createNotionDefinitions(propertyNames: string[]) {
       if (typeUnion) {
         for (const type of typeUnion.getTypeNodes()) {
           if (genericTypes.has(type.getText())) {
-            console.log('AAAAAAA', type.getFullText())
             type.replaceWithText(`${type.getText()}<T>`)
             const typeParams = typeAlias.getTypeParameters()
             if (typeParams.length === 0) {
@@ -55,20 +56,31 @@ export function createNotionDefinitions(propertyNames: string[]) {
         }
       }
     }
-    if (typeNode?.isKind(SyntaxKind.IntersectionType)) {
-      const typeIntersection = typeNode.asKind(SyntaxKind.IntersectionType)
-      if (typeIntersection) {
-        for (const type of typeIntersection.getTypeNodes()) {
-          if (genericTypes.has(type.getText())) {
-            type.replaceWithText(`${type.getText()}<T>`)
-            const typeParams = typeAlias.getTypeParameters()
-            if (typeParams.length === 0) {
-              typeAlias.addTypeParameter({ name: 'T', constraint: propertyNames.join(' | ') })
-            }
-          }
+    if (typeAlias) {
+      const type = typeAlias.getTypeNode()
+      // console.log('type', type)
+      if (type && genericTypes.has(type.getText())) {
+        type.replaceWithText(`${type.getText()}<T>`)
+        const typeParams = typeAlias.getTypeParameters()
+        if (typeParams.length === 0) {
+          typeAlias.addTypeParameter({ name: 'T', constraint: propertyNames.join(' | ') })
         }
       }
     }
+    // if (typeNode?.isKind(SyntaxKind.IntersectionType)) {
+    //   const typeIntersection = typeNode.asKind(SyntaxKind.IntersectionType)
+    //   if (typeIntersection) {
+    //     for (const type of typeIntersection.getTypeNodes()) {
+    //       if (genericTypes.has(type.getText())) {
+    //         type.replaceWithText(`${type.getText()}<T>`)
+    //         const typeParams = typeAlias.getTypeParameters()
+    //         if (typeParams.length === 0) {
+    //           typeAlias.addTypeParameter({ name: 'T', constraint: propertyNames.join(' | ') })
+    //         }
+    //       }
+    //     }
+    //   }
+    // }
   }
 
   return notionApiEndpointsFile.getFullText()
