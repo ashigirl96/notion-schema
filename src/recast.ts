@@ -103,8 +103,8 @@ export function createTypeDefinition(response: any, name: string) {
   const properties = notionDatabaseType.getProperties()
 
   const expandedDefinitions: string[] = []
-  const _name = `${name}Properties`
-  expandedDefinitions.push(`export type ${_name} = {`)
+  const propertyName = `${name}Properties`
+  expandedDefinitions.push(`export type ${propertyName} = {`)
   for (const property of properties) {
     const propName = property.getName()
     const propType = property.getTypeAtLocation(typeAlias).getText()
@@ -116,8 +116,53 @@ export function createTypeDefinition(response: any, name: string) {
   const expandedSource = expandedDefinitions.join('\n')
   const expandedFile = project.createSourceFile(outputFileName, expandedSource)
 
+  const propertyTypeAlias = expandedFile.getTypeAliasOrThrow(propertyName)
+  const propertyTypeLiteral = propertyTypeAlias
+    .getTypeNodeOrThrow()
+    .asKindOrThrow(SyntaxKind.TypeLiteral)
+
+  // TODO: enumの型を解析
+  for (const [propertyKey, value] of Object.entries(response.properties)) {
+    // _keyの最初の文字を大文字に変換
+    // @ts-expect-error
+    if (value.type === 'select' || value.type === 'multi_select') {
+      const _key = propertyKey.charAt(0).toUpperCase() + propertyKey.slice(1)
+      const enumName = `${name}${_key}Enum`
+      expandedFile.addEnum({
+        name: enumName,
+        // @ts-expect-error
+        members: value[value.type].options.map((option) => ({
+          name: option.name,
+          initializer: `"${option.name}"`,
+        })),
+      })
+
+      for (const property of propertyTypeLiteral.getProperties()) {
+        if (property.getName() === propertyKey) {
+          const propertyTypeNode = property.getTypeNodeOrThrow()
+          propertyTypeNode
+            .getDescendantsOfKind(SyntaxKind.PropertySignature)
+            .forEach((descendant) => {
+              if (descendant.getName() === value.type) {
+                const unionTypeNode = descendant.getTypeNodeOrThrow()
+                unionTypeNode
+                  .getDescendantsOfKind(SyntaxKind.TypeLiteral)
+                  .forEach((_typeLiteral) => {
+                    _typeLiteral.getProperties().forEach((selectProperty) => {
+                      if (selectProperty.getName() === 'name') {
+                        selectProperty.setType(enumName)
+                      }
+                    })
+                  })
+              }
+            })
+        }
+      }
+    }
+  }
+
   return {
-    name: _name,
+    name: propertyName,
     type: expandedFile.getFullText(),
   }
 }
@@ -137,6 +182,7 @@ export function _createTypeDefinition(response: any): string {
   })
 
   // メインとなるNotionDatabase型のASTを生成
+
   const fields = Object.entries(response.properties).map(([key, value]: [string, any]) => {
     const tsType = mapNotionTypeToTSType(value.type)
     return b.tsPropertySignature(b.identifier(key), b.tsTypeAnnotation(tsType))
