@@ -163,22 +163,21 @@ export function createTypeDefinition(response: any, name: string) {
       for (const prop of propertyTypeLiteral.getProperties()) {
         if (prop.getName() !== propertyKey) continue
         const propertyTypeNode = prop.getTypeNodeOrThrow()
-        propertyTypeNode
-          .getDescendantsOfKind(SyntaxKind.PropertySignature)
-          .forEach((descendant) => {
-            // @ts-expect-error
-            if (descendant.getName() !== value.type) return
-            descendant
-              .getTypeNodeOrThrow()
-              .getDescendantsOfKind(SyntaxKind.TypeLiteral)
-              .forEach((literal) => {
-                literal.getProperties().forEach((selectProp) => {
-                  if (selectProp.getName() === 'name') {
-                    selectProp.setType(enumName)
-                  }
-                })
-              })
-          })
+        for (const descendant of propertyTypeNode.getDescendantsOfKind(
+          SyntaxKind.PropertySignature,
+        )) {
+          // @ts-expect-error
+          if (descendant.getName() !== value.type) continue
+          for (const literal of descendant
+            .getTypeNodeOrThrow()
+            .getDescendantsOfKind(SyntaxKind.TypeLiteral)) {
+            for (const selectProp of literal.getProperties()) {
+              if (selectProp.getName() === 'name') {
+                selectProp.setType(enumName)
+              }
+            }
+          }
+        }
       }
     }
   }

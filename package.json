@@ -2,9 +2,16 @@
   "name": "notion-schema",
   "version": "1.0.0",
   "packageManager": "bun@1.1.36",
+  "main": "./src/index.ts",
   "bin": {
-    "notion-schema": "./dist/cli.js"
+    "notion-schema": "./src/cli.ts"
   },
+  "exports": {
+    ".": {
+      "import": "./src/index.ts"
+    }
+  },
+  "types": "./src/index.ts",
   "scripts": {
     "build": "tsup",
     "dev": "bun run --watch src/cli.ts generate -c ./example/notion.config.ts",
